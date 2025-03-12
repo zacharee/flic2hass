@@ -1,20 +1,26 @@
-import { HADevice, HAmqtt } from "./HAmqtt";
-import { makeLogger } from "./Logger";
-import { IRModule } from "./flicTypes";
-import { MQTT } from "./mqtt";
+import {HADevice, HAmqtt} from "./HAmqtt";
+import {makeLogger} from "./Logger";
+import {IRModule} from "./flicTypes";
+import {MQTT} from "./mqtt";
+import LZString from "./lzstring";
 
 const NODE_ID = 'FlicHubIR';
 const convertUint32Array2Str = (arr: Uint32Array): string => {
-    let outStr = []
+    let outStr = [];
     for (let i = 0; i < arr.length; i++) {
-        outStr.push(arr[i].toString(32))
+        outStr.push(arr[i].toString(32));
     }
-    return outStr.join('_')
-}
+    return outStr.join('');
+};
 const convertStr2Uint32Array = (s: string): Uint32Array => {
-    const a = s.split('_');
-    return new Uint32Array(a.slice(0, a.length - 2).map(v => parseInt(v, 32)))
-}
+    var a = [];
+
+    for (var i = 0, charsLength = s.length; i < charsLength; i += 2) {
+        a.push(s.substring(i, i + 2));
+    }
+    
+    return new Uint32Array(a.slice(0, a.length - 2).map(v => parseInt(v, 32)));
+};
 export type IRControllerOpt = {
     uniqueId: string,
     debug: boolean;
@@ -23,7 +29,7 @@ export const makeOptions = (opt: Partial<IRControllerOpt>): IRControllerOpt => (
     debug: false,
     uniqueId: "0",
     ...opt,
-})
+});
 export const makeIRController = (
     ir: IRModule,
     ha: HAmqtt,
@@ -38,7 +44,7 @@ export const makeIRController = (
         model: `${NODE_ID}${options.uniqueId}`,
         identifiers: ['FlicHubIR'],
         configuration_url: "https://hubsdk.flic.io/",
-    }
+    };
     const nodeId = `${NODE_ID}${options.uniqueId}`;
     const LIFELINE_SGINAL = ha.genFlicPrefix(nodeId, 'lifeline');
     const RECORD_SIGNAL_SET = ha.genFlicPrefix(nodeId, 'record/set');
@@ -51,7 +57,7 @@ export const makeIRController = (
             "payload_not_available": "unavailable",
             "topic": LIFELINE_SGINAL,
         }
-    ]
+    ];
     let currentSignal: string | null = null;
 
     const set_topics = [
@@ -63,8 +69,8 @@ export const makeIRController = (
 
     return {
         start() {
-            logger.info('starting...')
-            logger.debug('setting up entities...')
+            logger.info('starting...');
+            logger.debug('setting up entities...');
             ha.registerEntity(
                 'IR Available',
                 'binary_sensor',
@@ -79,7 +85,7 @@ export const makeIRController = (
                     payload_available: "ON",
                     payload_not_available: "OFF",
                 }
-            )
+            );
             ha.registerEntity(
                 'Record Signal',
                 'switch',
@@ -92,7 +98,7 @@ export const makeIRController = (
                     device_class: 'switch',
                     availability,
                 }
-            )
+            );
             ha.registerEntity(
                 'Signal',
                 'text',
@@ -105,7 +111,7 @@ export const makeIRController = (
                     max: 255,
                     availability,
                 }
-            )
+            );
             ha.registerEntity(
                 'Play Signal',
                 'button',
@@ -117,60 +123,66 @@ export const makeIRController = (
                     command_topic: PLAY_SIGNAL_SET,
                     availability,
                 }
-            )
-            logger.debug('setting default states....')
-            ha.publishState(nodeId, 'record', 'OFF')
-            ha.publishState(nodeId, 'play', 'OFF')
-            logger.debug('registering events')
+            );
+            logger.debug('setting default states....');
+            ha.publishState(nodeId, 'record', 'OFF');
+            ha.publishState(nodeId, 'play', 'OFF');
+            logger.debug('registering events');
             mqtt.on('message', (topic, message) => {
-                logger.debug('message:', JSON.stringify({ topic, message }))
+                logger.debug('message:', JSON.stringify({topic, message}));
                 if (topic === RECORD_SIGNAL_SET) {
-                    logger.debug('starting record')
-                    ir.record()
-                    ha.publishState(nodeId, 'record', 'ON')
+                    logger.debug('starting record');
+                    ir.record();
+                    ha.publishState(nodeId, 'record', 'ON');
                 } else if (topic === PLAY_SIGNAL_SET) {
                     if (currentSignal !== null) {
-                        logger.info('playing', currentSignal)
-                        let arr: Uint32Array | null = null
+                        logger.info('playing', currentSignal);
+                        let arr: Uint32Array | null = null;
                         try {
-                            arr = convertStr2Uint32Array(currentSignal)
+                            arr = convertStr2Uint32Array(currentSignal);
                         } catch (err) {
-                            logger.error('invalid string signal set', JSON.stringify(err), err)
-                            return
+                            logger.error('invalid string signal set', JSON.stringify(err), err);
+                            return;
                         }
+                        logger.info('playing array', JSON.stringify(arr));
                         ir.play(arr, (err) => {
                             if (err) {
-                                logger.error('failed to play signal', JSON.stringify(err), err)
+                                logger.error('failed to play signal', JSON.stringify(err), err);
                             } else {
-                                logger.debug('signal played!')
+                                logger.debug('signal played!');
                             }
-                        })
+                        });
                     } else {
-                        logger.error('cannot play an unset signal')
+                        logger.error('cannot play an unset signal');
                     }
                 } else if (topic === VALUE_SIGNAL_STATE) {
-                    currentSignal = message
-                    logger.info('setting currentSignal', currentSignal)
+                    currentSignal = LZString.decompressFromBase64(message);
+                    logger.info('setting currentSignal', currentSignal);
                 } else if (topic === VALUE_SIGNAL_SET) {
-                    ha.publishState(nodeId, 'signal', message, { retain: true })
+                    ha.publishState(nodeId, 'signal', message, {retain: true});
                 }
-            })
+            });
             ir.on('recordComplete', data => {
-                const stringMessage = convertUint32Array2Str(data)
-                logger.debug('recording completed with', JSON.stringify({ data, stringMessage, rev: convertStr2Uint32Array(stringMessage) }))
-                if (stringMessage.length > 255) {
-                    logger.error("stringMessage is too big! size=", stringMessage.length, 'max=255')
+                const stringMessage = convertUint32Array2Str(data);
+                const compressedMessage = LZString.compressToBase64(stringMessage);
+                logger.debug('recording complete');
+                logger.debug(JSON.stringify(data));
+                logger.debug(stringMessage);
+                logger.debug(JSON.stringify(convertStr2Uint32Array(stringMessage)));
+                logger.debug(compressedMessage);
+                if (compressedMessage.length > 255) {
+                    logger.error("stringMessage is too big! size=", compressedMessage.length, 'max=255');
                 }
-                ha.publishState(nodeId, 'signal', stringMessage, { retain: true })
-                ha.publishState(nodeId, 'record', 'OFF')
-            })
+                ha.publishState(nodeId, 'signal', compressedMessage, {retain: true});
+                ha.publishState(nodeId, 'record', 'OFF');
+            });
 
-            logger.debug('subscribing to', set_topics)
-            mqtt.subscribe(set_topics)
+            logger.debug('subscribing to', set_topics);
+            mqtt.subscribe(set_topics);
             setInterval(() => {
-                ha.publishState(nodeId, 'lifeline', 'ON')
-            }, 2500)
-            logger.info('is up')
+                ha.publishState(nodeId, 'lifeline', 'ON');
+            }, 2500);
+            logger.info('is up');
         }
-    }
-}
+    };
+};
