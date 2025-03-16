@@ -1032,7 +1032,7 @@ var makeIRController = function(ir, ha, mqtt) {
                         logger.error("cannot play an unset signal");
                     }
                 } else if (topic === VALUE_SIGNAL_STATE) {
-                    currentSignal = LZString.decompressFromBase64(LZString.decompressFromBase64(message));
+                    currentSignal = LZString.decompress(message);
                     logger.info("setting currentSignal", currentSignal);
                 } else if (topic === VALUE_SIGNAL_SET) {
                     ha.publishState(nodeId, "signal", message, {
@@ -1042,7 +1042,7 @@ var makeIRController = function(ir, ha, mqtt) {
             });
             ir.on("recordComplete", function(data) {
                 var stringMessage = convertUint32Array2Str(data);
-                var compressedMessage = LZString.compressToBase64(LZString.compressToBase64(stringMessage));
+                var compressedMessage = LZString.compress(stringMessage);
                 logger.debug("recording complete");
                 logger.debug(JSON.stringify(data));
                 logger.debug(stringMessage);

@@ -156,7 +156,7 @@ export const makeIRController = (
                         logger.error('cannot play an unset signal');
                     }
                 } else if (topic === VALUE_SIGNAL_STATE) {
-                    currentSignal = LZString.decompressFromBase64(LZString.decompressFromBase64(message));
+                    currentSignal = LZString.decompress(message);
                     logger.info('setting currentSignal', currentSignal);
                 } else if (topic === VALUE_SIGNAL_SET) {
                     ha.publishState(nodeId, 'signal', message, {retain: true});
@@ -164,7 +164,7 @@ export const makeIRController = (
             });
             ir.on('recordComplete', data => {
                 const stringMessage = convertUint32Array2Str(data);
-                const compressedMessage = LZString.compressToBase64(LZString.compressToBase64(stringMessage));
+                const compressedMessage = LZString.compress(stringMessage);
                 logger.debug('recording complete');
                 logger.debug(JSON.stringify(data));
                 logger.debug(stringMessage);
