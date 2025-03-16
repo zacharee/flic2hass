@@ -18,7 +18,7 @@ const convertStr2Uint32Array = (s: string): Uint32Array => {
     for (var i = 0, charsLength = s.length; i < charsLength; i += 2) {
         a.push(s.substring(i, i + 2));
     }
-    
+
     return new Uint32Array(a.slice(0, a.length - 2).map(v => parseInt(v, 32)));
 };
 export type IRControllerOpt = {
@@ -156,7 +156,7 @@ export const makeIRController = (
                         logger.error('cannot play an unset signal');
                     }
                 } else if (topic === VALUE_SIGNAL_STATE) {
-                    currentSignal = LZString.decompressFromBase64(message);
+                    currentSignal = LZString.decompressFromBase64(LZString.decompressFromBase64(message));
                     logger.info('setting currentSignal', currentSignal);
                 } else if (topic === VALUE_SIGNAL_SET) {
                     ha.publishState(nodeId, 'signal', message, {retain: true});
@@ -164,7 +164,7 @@ export const makeIRController = (
             });
             ir.on('recordComplete', data => {
                 const stringMessage = convertUint32Array2Str(data);
-                const compressedMessage = LZString.compressToBase64(stringMessage);
+                const compressedMessage = LZString.compressToBase64(LZString.compressToBase64(stringMessage));
                 logger.debug('recording complete');
                 logger.debug(JSON.stringify(data));
                 logger.debug(stringMessage);
